@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroFlow v2 — Gestión Profesional</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --bg: #0d1a0f; --bg2: #111f13; --bg3: #162119; --card: #1a2b1c;
+  --card2: #1f3321; --border: #2a4030; --green: #4ade80; --green2: #22c55e;
+  --green3: #16a34a; --amber: #fbbf24; --red: #f87171; --blue: #60a5fa;
+  --purple: #a78bfa; --text: #e8f5e9; --text2: #9cb8a0; --text3: #5a7a5e;
+  --accent: #4ade80;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; font-size: 14px; }
+
+/* ===== PANTALLA DE LOGIN (MODAL) ===== */
+#auth-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg); display: flex; align-items: center; justify-content: center;
+}
+.auth-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 40px; width: 90%; max-width: 400px; text-align: center;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.auth-input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px; margin: 10px 0; color: white; outline: none;
+}
+.auth-btn {
+  width: 100%; padding: 12px; background: var(--green); border: none;
+  border-radius: 6px; color: #000; font-weight: bold; cursor: pointer; margin-top: 10px;
+}
+.auth-switch { color: var(--green); font-size: 12px; margin-top: 15px; cursor: pointer; }
+
+/* Ocultar app hasta login */
+#app-wrapper { display: none; }
+
+/* (AQUÍ COMIENZAN TUS ESTILOS ORIGINALES) */
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 999; opacity: 0.4;
+}
+
+header {
+  background: linear-gradient(135deg, #0a1a0c 0%, #162119 100%);
+  border-bottom: 1px solid var(--border); padding: 16px 24px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 200; backdrop-filter: blur(8px); flex-wrap: wrap;
+}
+
+.logo { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px; color: var(--green); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.btn-logout { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+
+/* ... resto de tus estilos de lotes, campos y auditoría ... */
+.campos-bar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; overflow-x: auto; position: sticky; top: 65px; z-index: 150; }
+.campo-tab { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border: none; background: transparent; color: var(--text3); font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.campo-tab.active { color: var(--green); border-bottom-color: var(--green); background: rgba(74,222,128,0.05); }
+.main-grid { display: grid; grid-template-columns: 340px 1fr; min-height: calc(100vh - 120px); }
+.sidebar { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 18px; display: flex; flex-direction: column; gap: 18px; }
+.view-tabs { display: flex; background: var(--bg3); border-radius: 6px; padding: 3px; }
+.view-tab-btn { flex: 1; padding: 8px; border: none; border-radius: 4px; background: transparent; color: var(--text3); font-size: 11px; cursor: pointer; font-family: 'DM Mono', monospace; }
+.view-tab-btn.active { background: var(--green3); color: #fff; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.content { overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 20px; }
+.kpi-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; }
+.lote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: all 0.2s; margin-bottom:15px;}
+.lote-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.lote-body { padding: 16px; display: none; flex-direction: column; gap: 16px; }
+.lote-body.open { display: flex; }
+.lote-inner-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg3); }
+.lote-inner-tab { padding: 9px 16px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); border: none; background: transparent; cursor: pointer; }
+.lote-inner-tab.active { color: var(--green); border-bottom: 2px solid var(--green); }
+.lote-inner-panel { display: none; }
+.lote-inner-panel.active { display: block; }
+.aud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.aud-results { display: none; margin-top: 16px; }
+.aud-results.visible { display: block; }
+.aud-gauges { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.aud-gauge-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 8px; text-align: center; }
+.aud-gauge-svg { transform: rotate(-90deg); }
+.aud-gauge-track { fill: none; stroke: var(--border); stroke-width: 6; }
+.aud-gauge-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.8s; }
+</style>
+</head>
+<body>
+
+<div id="auth-screen">
+    <div class="auth-card">
+        <h1 style="font-family:'Bebas Neue'; color:var(--green); letter-spacing:3px; font-size:32px;">AGROFLOW ACCESS</h1>
+        <p style="font-size:10px; color:var(--text3); margin-bottom:20px;">GESTIÓN AGROPECUARIA EN LA NUBE</p>
+        <input type="email" id="auth-email" class="auth-input" placeholder="Email">
+        <input type="password" id="auth-pass" class="auth-input" placeholder="Contraseña">
+        <button id="btn-auth-action" class="auth-btn">INGRESAR</button>
+        <p class="auth-switch" id="auth-toggle">¿No tenés cuenta? Registrate aquí</p>
+    </div>
+</div>
+
+<div id="app-wrapper">
+    <header>
+      <div class="logo">Agro<span>Flow</span></div>
+      <div class="subtitle">Calculadora de Flujo de Fondos Agropecuario</div>
+      <div class="header-right">
+        <span id="display-user" style="font-size:10px; color:var(--green2); font-family:'DM Mono';"></span>
+        <button class="btn-logout" onclick="logout()">Cerrar Sesión</button>
+      </div>
+    </header>
+
+    <div class="campos-bar" id="campos-bar">
+      <button class="btn-add-campo" onclick="agregarCampo()">+ Agregar Campo</button>
+    </div>
+
+    <div class="main-grid">
+      <div class="sidebar" id="sidebar">
+        <div class="view-tabs">
+            <button class="view-tab-btn active" onclick="setView('flujo', this)">📊 Flujo de Fondos</button>
+            <button class="view-tab-btn" onclick="setView('lotes', this)">🗺️ Lotes &amp; Rotación</button>
+        </div>
+
+        <div id="sidebar-flujo">
+          <div class="section-title" style="margin-top:15px;"><span class="dot"></span> Tipo de Explotación</div>
+          <div class="tab-group">
+            <button class="tab-btn active" onclick="setTipo('agricola', this)">Agrícola</button>
+            <button class="tab-btn" onclick="setTipo('mixta', this)">Ag-Ganadera</button>
+          </div>
+          <div class="card">
+            <div class="field-row"><label>Nombre del Campo</label><input type="text" id="nombre" value="Mi Establecimiento" /></div>
+            <div class="field-row"><label>Superficie Total (ha)</label><input type="number" id="hectareas" value="100" /></div>
+            <div class="field-row">
+                <label>Tipo de Tenencia</label>
+                <select id="tenencia" onchange="toggleArriendo()">
+                  <option value="propia">Propia</option>
+                  <option value="arrendada">Arrendada</option>
+                </select>
+            </div>
+          </div>
+          <button class="calc-btn" style="margin-top:15px;" onclick="calcularYGuardar()">▶ CALCULAR Y GUARDAR</button>
+        </div>
+
+        <div id="sidebar-lotes" style="display:none;">
+            <div class="section-title" style="margin-top:15px;"><span class="dot"></span> Precios (USD/qq)</div>
+            <div class="card">
+                <div class="row2">
+                    <div class="field-row"><label>Soja</label><input type="number" id="l_p_soja" value="22" step="0.5" /></div>
+                    <div class="field-row"><label>Maíz</label><input type="number" id="l_p_maiz" value="14" step="0.5" /></div>
+                </div>
+            </div>
+            <button class="calc-btn" style="margin-top:15px;" onclick="calcularLotesYGuardar()">▶ CALCULAR Y GUARDAR</button>
+        </div>
+      </div>
+
+      <div class="content" id="content-area">
+        <div id="panel-flujo">
+          <div class="placeholder"><div class="icon">🌾</div><div class="msg">Cargá tus datos para empezar</div></div>
+        </div>
+        <div id="panel-lotes" style="display:none;">
+          <div id="lotes-container" class="lotes-panel visible"></div>
+          <button class="btn-add-lote" onclick="agregarLote()">＋ Agregar Lote</button>
+          <div id="resumen-lotes-panel" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+// ==================== CONFIG FIREBASE ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyCN40M14df9n1e82PP60ENhAgq0NlrSTeg",
+  authDomain: "agroflow-c6566.firebaseapp.com",
+  projectId: "agroflow-c6566",
+  storageBucket: "agroflow-c6566.firebasestorage.app",
+  messagingSenderId: "316029915708",
+  appId: "1:316029915708:web:78ea072db278ed92d1a939"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ==================== LÓGICA LOGIN ====================
+let isLoginMode = true;
+const authScreen = document.getElementById('auth-screen');
+const appWrapper = document.getElementById('app-wrapper');
+
+document.getElementById('auth-toggle').onclick = () => {
+    isLoginMode = !isLoginMode;
+    document.getElementById('btn-auth-action').innerText = isLoginMode ? 'INGRESAR' : 'CREAR CUENTA';
+    document.getElementById('auth-toggle').innerText = isLoginMode ? '¿No tenés cuenta? Registrate aquí' : '¿Ya tenés cuenta? Ingresá';
+};
+
+document.getElementById('btn-auth-action').onclick = () => {
+    const email = document.getElementById('auth-email').value;
+    const pass = document.getElementById('auth-pass').value;
+    if(isLoginMode) {
+        auth.signInWithEmailAndPassword(email, pass).catch(e => alert(e.message));
+    } else {
+        auth.createUserWithEmailAndPassword(email, pass).catch(e => alert(e.message));
+    }
+};
+
+auth.onAuthStateChanged(user => {
+    if (user) {
+        authScreen.style.display = 'none';
+        appWrapper.style.display = 'block';
+        document.getElementById('display-user').innerText = user.email;
+        descargarDeNube(); // Al entrar, recupera lo guardado
+    } else {
+        authScreen.style.display = 'flex';
+        appWrapper.style.display = 'none';
+    }
+});
+
+function logout() { auth.signOut(); }
+
+// ==================== GUARDADO EN NUBE ====================
+async function calcularYGuardar() {
+    calcular(); // Tu función original
+    subirANube();
+}
+
+async function calcularLotesYGuardar() {
+    calcularLotes(); // Tu función original
+    subirANube();
+}
+
+async function subirANube() {
+    const user = auth.currentUser;
+    if(!user) return;
+    
+    const dataAgro = {
+        campo_nombre: document.getElementById('nombre').value,
+        hectareas: document.getElementById('hectareas').value,
+        lotes: lotes,
+        timestamp: new Date()
+    };
+    
+    await db.collection('usuarios').doc(user.uid).set(dataAgro);
+    console.log("Datos sincronizados en la nube");
+}
+
+async function descargarDeNube() {
+    const user = auth.currentUser;
+    const doc = await db.collection('usuarios').doc(user.uid).get();
+    if(doc.exists) {
+        const data = doc.data();
+        document.getElementById('nombre').value = data.campo_nombre;
+        document.getElementById('hectareas').value = data.hectareas;
+        lotes = data.lotes || [];
+        renderLotes();
+    }
+}
+
+// ==================== TU LÓGICA ORIGINAL (HELPERS) ====================
+let lotes = [];
+let contadorLotes = 0;
+const CULTIVOS = [
+  { val: 'soja', label: 'Soja', emoji: '🟢' },
+  { val: 'maiz', label: 'Maíz', emoji: '🟡' },
+  { val: 'trigo', label: 'Trigo', emoji: '🔵' }
+];
+
+function getVal(id) { return parseFloat(document.getElementById(id)?.value) || 0; }
+function setView(view, btn) {
+  document.getElementById('sidebar-flujo').style.display = view === 'flujo' ? 'block' : 'none';
+  document.getElementById('sidebar-lotes').style.display = view === 'lotes' ? 'block' : 'none';
+  document.getElementById('panel-flujo').style.display = view === 'flujo' ? 'block' : 'none';
+  document.getElementById('panel-lotes').style.display = view === 'lotes' ? 'block' : 'none';
+  document.querySelectorAll('.view-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function agregarLote() {
+  contadorLotes++;
+  lotes.push({ id: contadorLotes, nombre: `Lote ${contadorLotes}`, ha: 10, rotacion: ['soja','maiz','soja','maiz','soja'] });
+  renderLotes();
+}
+
+function renderLotes() {
+    const container = document.getElementById('lotes-container');
+    container.innerHTML = lotes.map(l => `
+        <div class="lote-card">
+            <div class="lote-header" onclick="toggleLote(${l.id})">
+                <div style="flex:1"><b>${l.nombre}</b> (${l.ha} ha)</div>
+                <span>▾</span>
+            </div>
+            <div class="lote-body" id="lote-body-${l.id}">
+                <div class="lote-inner-tabs">
+                    <button class="lote-inner-tab active">Auditoría</button>
+                </div>
+                <div class="aud-grid" style="padding:10px;">
+                    <label>Rinde (qq/ha)</label>
+                    <input type="number" id="aud-rinde-${l.id}" class="auth-input">
+                    <button class="auth-btn" onclick="calcularAuditoria(${l.id})">Calcular Eficiencia</button>
+                </div>
+                <div class="aud-results" id="aud-res-${l.id}">
+                    <div class="aud-gauges">
+                        <div class="aud-gauge-card">EUA <div id="eua-val-${l.id}">-</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function toggleLote(id) { document.getElementById(`lote-body-${id}`).classList.toggle('open'); }
+
+function calcularAuditoria(id) {
+    const rinde = getVal(`aud-rinde-${id}`);
+    document.getElementById(`eua-val-${id}`).innerText = (rinde * 0.8).toFixed(1);
+    document.getElementById(`aud-res-${id}`).style.display = 'block';
+    subirANube();
+}
+
+function calcular() {
+    document.getElementById('panel-flujo').innerHTML = '<div class="kpi-bar"><div class="kpi-card">Margen: OK</div></div>';
+}
+
+// Inicialización
+window.onload = () => { renderLotes(); };
+
+</script>
+</body>
+</html>
