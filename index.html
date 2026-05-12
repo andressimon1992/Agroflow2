@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroFlow v2 — Autenticación y Persistencia</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+/* ... (Se mantienen tus estilos Dark Mode existentes) ... */
+:root {
+  --bg: #0d1a0f; --bg2: #111f13; --bg3: #162119; --card: #1a2b1c;
+  --border: #2a4030; --green: #4ade80; --text: #e8f5e9; --amber: #fbbf24;
+}
+
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; margin: 0; }
+
+/* ESTILOS AUTH MODAL */
+#auth-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+    display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.auth-card {
+    background: var(--card); border: 1px solid var(--border);
+    padding: 30px; border-radius: 12px; width: 100%; max-width: 400px; text-align: center;
+}
+.auth-input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    color: white; padding: 12px; margin: 10px 0; border-radius: 6px; outline: none;
+}
+.auth-btn {
+    width: 100%; padding: 12px; background: var(--green); border: none;
+    color: #000; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px;
+}
+.switch-auth { color: var(--green); font-size: 12px; cursor: pointer; margin-top: 15px; display: block; }
+
+header { padding: 15px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 5px 12px; cursor: pointer; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div id="auth-overlay">
+    <div class="auth-card">
+        <h2 style="font-family:'Bebas Neue'; letter-spacing:2px; color:var(--green)">AGROFLOW ACCESS</h2>
+        <p id="auth-msg" style="font-size:12px; color:var(--amber); margin-bottom:10px; display:none;"></p>
+        <input type="email" id="email" class="auth-input" placeholder="Tu Email">
+        <input type="password" id="password" class="auth-input" placeholder="Tu Contraseña">
+        <button id="btn-login" class="auth-btn">INGRESAR</button>
+        <button id="btn-signup" class="auth-btn" style="display:none; background:transparent; color:var(--green); border:1px solid var(--green)">CREAR CUENTA</button>
+        <span class="switch-auth" id="toggle-auth">¿No tenés cuenta? Registrate aquí</span>
+    </div>
+</div>
+
+<header>
+    <div style="font-family:'Bebas Neue'; font-size:24px; color:var(--green)">Agro<span>Flow</span></div>
+    <div id="user-info" style="display:none; align-items:center; gap:15px;">
+        <span id="user-email" style="font-size:11px; color:var(--green)"></span>
+        <button class="btn-logout" onclick="logout()">Cerrar Sesión</button>
+    </div>
+</header>
+
+<main id="app-content" style="opacity:0.3; pointer-events:none; padding:20px;">
+    <h3 style="font-family:'Bebas Neue';">DATOS DE CAMPAÑA</h3>
+    <button class="auth-btn" style="max-width:200px" onclick="guardarYCalcular()">CALCULAR Y GUARDAR</button>
+</main>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// CONFIGURACIÓN DE FIREBASE (PEGA TUS LLAVES AQUÍ)
+// ══════════════════════════════════════════════════════════
+const firebaseConfig = {
+    apiKey: "AIzaSyCN40M14df9n1e82PP6OENhAgq0NlrSTeg",
+    authDomain: "agroflow-c6566.firebaseapp.com",
+    projectId: "agroflow-c6566",
+    storageBucket: "agroflow-c6566.firebasestorage.app",
+    messagingSenderId: "316029915708",
+    appId: "1:316029915708:web:78ea072db278ed92d1a939"
+};
+
+// Inicializar Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ══════════════════════════════════════════════════════════
+// LÓGICA DE USUARIOS
+// ══════════════════════════════════════════════════════════
+
+// Elementos UI
+const authOverlay = document.getElementById('auth-overlay');
+const appContent = document.getElementById('app-content');
+const userEmailSpan = document.getElementById('user-email');
+const userInfo = document.getElementById('user-info');
+
+// Login / Registro / Estado
+auth.onAuthStateChanged(user => {
+    if (user) {
+        authOverlay.style.display = 'none';
+        appContent.style.opacity = '1';
+        appContent.style.pointerEvents = 'auto';
+        userInfo.style.display = 'flex';
+        userEmailSpan.innerText = user.email;
+        cargarDatosDesdeNube(user.uid); // Recuperar avance
+    } else {
+        authOverlay.style.display = 'flex';
+        appContent.style.opacity = '0.3';
+        appContent.style.pointerEvents = 'none';
+        userInfo.style.display = 'none';
+    }
+});
+
+// Funciones de Auth
+document.getElementById('btn-login').onclick = () => {
+    const email = document.getElementById('email').value;
+    const pass = document.getElementById('password').value;
+    auth.signInWithEmailAndPassword(email, pass).catch(err => alert(err.message));
+};
+
+document.getElementById('btn-signup').onclick = () => {
+    const email = document.getElementById('email').value;
+    const pass = document.getElementById('password').value;
+    auth.createUserWithEmailAndPassword(email, pass).catch(err => alert(err.message));
+};
+
+// Toggle entre Login y Registro
+document.getElementById('toggle-auth').onclick = function() {
+    const isLogin = document.getElementById('btn-login').style.display !== 'none';
+    document.getElementById('btn-login').style.display = isLogin ? 'none' : 'block';
+    document.getElementById('btn-signup').style.display = isLogin ? 'block' : 'none';
+    this.innerText = isLogin ? "¿Ya tenés cuenta? Ingresá" : "¿No tenés cuenta? Registrate aquí";
+};
+
+function logout() { auth.signOut(); }
+
+// ══════════════════════════════════════════════════════════
+// PERSISTENCIA DE DATOS
+// ══════════════════════════════════════════════════════════
+
+async function guardarYCalcular() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // 1. Recopilar datos (ajustar según tus IDs reales de inputs)
+    const datos = {
+        ultimo_calculo: new Date().toISOString(),
+        lotes: [
+            { nombre: "Lote Norte", ha: 150, cultivo: "maiz" }, // Ejemplo
+            // Aquí deberías mapear tus inputs reales
+        ],
+        precios: {
+            soja: 22,
+            maiz: 14
+        }
+    };
+
+    try {
+        await db.collection('proyectos_agro').doc(user.uid).set(datos);
+        console.log("¡Datos guardados en la nube!");
+        // Aquí llamas a tu función original de cálculo:
+        // calcularFlujo(); 
+    } catch (error) {
+        console.error("Error al guardar:", error);
+    }
+}
+
+async function cargarDatosDesdeNube(uid) {
+    try {
+        const doc = await db.collection('proyectos_agro').doc(uid).get();
+        if (doc.exists) {
+            const data = doc.data();
+            console.log("Recuperando datos:", data);
+            // 2. Llenar inputs automáticamente
+            // document.getElementById('input-soja').value = data.precios.soja;
+            // renderizarLotesGuardados(data.lotes);
+        }
+    } catch (error) {
+        console.error("Error al cargar:", error);
+    }
+}
+</script>
+</body>
+</html>
